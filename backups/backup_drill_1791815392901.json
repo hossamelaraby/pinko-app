@@ -1,0 +1,112 @@
+{
+  "metadata": {
+    "timestamp": "2026-10-12T14:29:52.873Z",
+    "version": "1.0.0",
+    "system": "Pinko App"
+  },
+  "tables": {
+    "businesses": [
+      {
+        "name": "Pinko App Confectionery",
+        "currency": "EGP",
+        "timezone": "Africa/Cairo",
+        "id": "1101e12b-b809-4822-bf80-99d2c1acd92e",
+        "created_at": "2026-10-12T14:29:52.667Z",
+        "updated_at": "2026-10-12T14:29:52.667Z"
+      }
+    ],
+    "locations": [
+      {
+        "business_id": "1101e12b-b809-4822-bf80-99d2c1acd92e",
+        "code": "shop1_warehouse1",
+        "name": "المحل 1 — المخزن 1",
+        "type": "shop_warehouse",
+        "id": "fb9af923-e8b2-4b72-b324-d70311498b7b",
+        "is_active": true,
+        "created_at": "2026-10-12T14:29:52.669Z"
+      },
+      {
+        "business_id": "1101e12b-b809-4822-bf80-99d2c1acd92e",
+        "code": "shop2_warehouse2",
+        "name": "المحل 2 — المخزن 2",
+        "type": "shop_warehouse",
+        "id": "59a2a449-cd09-410a-af11-2823f198c1b7",
+        "is_active": true,
+        "created_at": "2026-10-12T14:29:52.669Z"
+      },
+      {
+        "business_id": "1101e12b-b809-4822-bf80-99d2c1acd92e",
+        "code": "vehicle_ibrahim",
+        "name": "سيارة التوزيع — إبراهيم",
+        "type": "vehicle",
+        "id": "096ea656-4b33-45cb-8719-f51dffb7a18d",
+        "is_active": true,
+        "created_at": "2026-10-12T14:29:52.669Z"
+      }
+    ],
+    "products": [
+      {
+        "business_id": "1101e12b-b809-4822-bf80-99d2c1acd92e",
+        "category_id": "b61adc71-ef44-40fb-a39b-16677902246c",
+        "sku": "CHOC-001",
+        "barcode": "6221234567890",
+        "name_ar": "شوكولاتة بينكو بالبندق",
+        "name_en": "Pinko Hazelnut Chocolate",
+        "base_unit": "piece",
+        "box_unit": "box",
+        "box_ratio": 12,
+        "carton_unit": "carton",
+        "carton_ratio": 144,
+        "retail_price_piastres": 1000,
+        "wholesale_price_piastres": 800,
+        "cost_price_piastres": 600,
+        "reorder_threshold": 20,
+        "id": "d4b8857e-a0b5-4bfb-873f-f15341c8c36b",
+        "is_active": true,
+        "created_at": "2026-10-12T14:29:52.674Z",
+        "updated_at": "2026-10-12T14:29:52.674Z"
+      }
+    ],
+    "stockLedger": [
+      {
+        "business_id": "1101e12b-b809-4822-bf80-99d2c1acd92e",
+        "product_id": "d4b8857e-a0b5-4bfb-873f-f15341c8c36b",
+        "location_id": "fb9af923-e8b2-4b72-b324-d70311498b7b",
+        "movement_type": "receipt",
+        "quantity_base": 500,
+        "reference_id": "PO-DRILL-01",
+        "actor_id": "cebe0f9e-d44a-42a1-a727-4f71108369f4",
+        "reason": "اختبار النسخ الاحتياطي",
+        "idempotency_key": null,
+        "id": "819acbc9-c840-42ee-a12f-9482b0e4dfae",
+        "created_at": "2026-10-12T14:29:52.676Z"
+      }
+    ],
+    "stockBalances": [
+      {
+        "business_id": "1101e12b-b809-4822-bf80-99d2c1acd92e",
+        "product_id": "d4b8857e-a0b5-4bfb-873f-f15341c8c36b",
+        "location_id": "096ea656-4b33-45cb-8719-f51dffb7a18d",
+        "on_hand_base": 0,
+        "id": "b3791aa6-7c36-48c2-928e-09334bff2e14",
+        "updated_at": "2026-10-12T14:29:52.678Z"
+      },
+      {
+        "business_id": "1101e12b-b809-4822-bf80-99d2c1acd92e",
+        "product_id": "d4b8857e-a0b5-4bfb-873f-f15341c8c36b",
+        "location_id": "59a2a449-cd09-410a-af11-2823f198c1b7",
+        "on_hand_base": 0,
+        "id": "309fd398-0f8e-4180-8215-ac5cfa923889",
+        "updated_at": "2026-10-12T14:29:52.678Z"
+      },
+      {
+        "business_id": "1101e12b-b809-4822-bf80-99d2c1acd92e",
+        "product_id": "d4b8857e-a0b5-4bfb-873f-f15341c8c36b",
+        "location_id": "fb9af923-e8b2-4b72-b324-d70311498b7b",
+        "on_hand_base": 500,
+        "id": "66738379-100f-484d-9803-a7654f5bd3a5",
+        "updated_at": "2026-10-12T14:29:52.864Z"
+      }
+    ]
+  }
+}
