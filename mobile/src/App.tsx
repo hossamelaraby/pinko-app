@@ -27,7 +27,6 @@ import {
   AlertCircle,
   BarChart3,
   Settings,
-  Server,
   Edit,
   Save,
   X
@@ -52,19 +51,6 @@ export default function App() {
   const [editSaleCashEGP, setEditSaleCashEGP] = useState<string>('');
   const [editSaleCreditEGP, setEditSaleCreditEGP] = useState<string>('');
   const [editSaleNotes, setEditSaleNotes] = useState<string>('');
-
-  // Server URL Configuration for Local/Network/Cloud Android APK
-  const [serverUrl, setServerUrl] = useState<string>(() => {
-    return localStorage.getItem('pinko_server_url') || (window.location.protocol === 'file:' ? 'http://localhost:4000' : '');
-  });
-  const [showServerConfig, setShowServerConfig] = useState<boolean>(false);
-  const [tempServerUrl, setTempServerUrl] = useState<string>(serverUrl);
-
-  const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
-    const base = serverUrl.replace(/\/+$/, '');
-    const url = endpoint.startsWith('http') ? endpoint : `${base}${endpoint}`;
-    return fetch(url, options);
-  };
 
   // App Navigation Tabs (بيع كاشير / المخزن / المبيعات والتقارير / خط سير السيارة)
   const [workMode, setWorkMode] = useState<'sell' | 'warehouse' | 'sales_history' | 'vehicle_route'>('sell');
@@ -729,15 +715,7 @@ export default function App() {
               )}
 
               <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-600">أدخل كلمة المرور:</label>
-                  <span className="text-[10px] text-pinko-accent font-bold">
-                    {selectedRole === 'owner' && 'Pinko@Boss2026'}
-                    {selectedRole === 'branch' && branchChoice === 'shop1_warehouse1' && 'Shop1@Hanaa'}
-                    {selectedRole === 'branch' && branchChoice === 'shop2_warehouse2' && 'Shop2@Mohamed'}
-                    {selectedRole === 'vehicle' && 'Pinko@Car2026'}
-                  </span>
-                </div>
+                <label className="text-xs font-bold text-slate-600 block mb-1">أدخل كلمة المرور:</label>
                 <div className="relative">
                   <input
                     type="password"
@@ -765,71 +743,6 @@ export default function App() {
                 {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
                 <span>دخول النظام</span>
               </button>
-            </div>
-          )}
-
-          {/* Server Connection Settings Button */}
-          <div className="pt-2 text-center">
-            <button
-              type="button"
-              onClick={() => { setTempServerUrl(serverUrl); setShowServerConfig(true); }}
-              className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-pinko-plum font-semibold bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm"
-            >
-              <Server className="w-3.5 h-3.5 text-pinko-accent" />
-              <span>إعدادات الاتصال بالسحابة: {serverUrl ? serverUrl : 'تلقائي (سحابي)'}</span>
-            </button>
-          </div>
-
-          {/* Server Settings Modal */}
-          {showServerConfig && (
-            <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-              <div className="bg-white w-full max-w-sm rounded-2xl p-5 shadow-2xl space-y-4 text-right">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                  <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
-                    <Server className="w-4 h-4 text-pinko-accent" />
-                    عنوان خادم السحابة / الشبكة
-                  </h3>
-                  <button onClick={() => setShowServerConfig(false)} className="text-slate-400 hover:text-slate-600 text-sm font-bold">✕</button>
-                </div>
-                <p className="text-xs text-slate-500">
-                  أدخل عنوان IP للكمبيوتر الرئيسي أو رابط السحابة للربط مع قاعدة بيانات Supabase:
-                </p>
-                <input
-                  type="text"
-                  value={tempServerUrl}
-                  onChange={(e) => setTempServerUrl(e.target.value)}
-                  placeholder="مثال: http://192.168.1.100:4000"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono outline-none focus:border-pinko-accent text-left"
-                  dir="ltr"
-                />
-                <div className="flex gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const trimmed = tempServerUrl.trim();
-                      setServerUrl(trimmed);
-                      localStorage.setItem('pinko_server_url', trimmed);
-                      setShowServerConfig(false);
-                      setAlertMsg({ text: 'تم حفظ عنوان الخادم بنجاح وتحديث الاتصال', type: 'success' });
-                    }}
-                    className="flex-1 py-2 bg-pinko-plum text-white rounded-xl text-xs font-bold shadow"
-                  >
-                    حفظ وتطبيق
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTempServerUrl('http://localhost:4000');
-                      setServerUrl('http://localhost:4000');
-                      localStorage.setItem('pinko_server_url', 'http://localhost:4000');
-                      setShowServerConfig(false);
-                    }}
-                    className="px-3 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold"
-                  >
-                    افتراضي
-                  </button>
-                </div>
-              </div>
             </div>
           )}
         </div>
