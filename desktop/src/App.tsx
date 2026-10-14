@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { SupabaseService, ROLE_PASSWORDS } from './services/supabaseService';
 import {
   Crown,
   Building2,
@@ -136,6 +137,12 @@ export default function App() {
   const [settleDebtModal, setSettleDebtModal] = useState<SaleRecord | null>(null);
   const [settleAmountEGP, setSettleAmountEGP] = useState<string>('');
 
+  // Sale Management Modals for Owner (حذف وتعديل الفواتير)
+  const [editingSaleModal, setEditingSaleModal] = useState<SaleRecord | null>(null);
+  const [editSaleCashEGP, setEditSaleCashEGP] = useState<string>('');
+  const [editSaleCreditEGP, setEditSaleCreditEGP] = useState<string>('');
+  const [editSaleNotes, setEditSaleNotes] = useState<string>('');
+
   // Vehicle Fleet State
   const [vehiclePeriod, setVehiclePeriod] = useState<'daily' | 'monthly' | 'yearly'>('daily');
   const [vehicleStops, setVehicleStops] = useState<any[]>([]);
@@ -212,32 +219,15 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentUser]);
 
-  // Helper APIs
-  const API_BASE = window.location.protocol === 'file:' ? 'http://localhost:4000' : '';
-
-  const apiCall = async (url: string, options: RequestInit = {}) => {
-    const headers = {
-      'Content-Type': 'application/json',
-      'x-user-role': currentUser?.username || 'owner',
-      ...(options.headers || {})
-    };
-    const fullUrl = url.startsWith('http') ? url : `${API_BASE}${url}`;
-    const res = await fetch(fullUrl, { ...options, headers });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'فشل الاتصال بالخادم' }));
-      throw new Error(err.error || `خطأ ${res.status}`);
-    }
-    return res.json();
-  };
-
+  // Data Loaders using Direct Cloud Supabase Service
   const loadLocations = async () => {
     try {
-      const locs: Location[] = await apiCall('/api/locations');
+      const locs: any = await SupabaseService.getLocations();
       setLocations(locs);
-      if (currentUser.role === 'owner') {
-        const defaultBranch = locs.find(l => l.code === 'shop1_warehouse1') || locs[0];
+      if (currentUser?.role === 'owner') {
+        const defaultBranch = locs.find((l: any) => l.code === 'shop1_warehouse1') || locs[0];
         if (defaultBranch && !activeBranchId) setActiveBranchId(defaultBranch.id);
-      } else if (currentUser.assigned_location_id) {
+      } else if (currentUser?.assigned_location_id) {
         setActiveBranchId(currentUser.assigned_location_id);
       }
     } catch (e: any) {
@@ -247,7 +237,7 @@ export default function App() {
 
   const loadCategories = async () => {
     try {
-      const cats: Category[] = await apiCall('/api/categories');
+      const cats: any = await SupabaseService.getCategories();
       setCategories(cats);
     } catch (e: any) {
       setAlertMsg({ text: e.message, type: 'error' });
@@ -257,7 +247,7 @@ export default function App() {
   const loadProducts = async (locationId: string) => {
     try {
       setLoading(true);
-      const prods: Product[] = await apiCall(`/api/products?locationId=${locationId}`);
+      const prods: any = await SupabaseService.getProducts(locationId);
       setProducts(prods);
       setLoading(false);
     } catch (e: any) {
@@ -268,20 +258,20 @@ export default function App() {
 
   const loadReports = async () => {
     try {
-      let locQuery = '';
-      if (currentUser.role === 'owner') {
+      let locId: string | undefined = undefined;
+      if (currentUser?.role === 'owner') {
         if (reportBranchFilter === 'shop1') {
           const s1 = locations.find(l => l.code === 'shop1_warehouse1');
-          if (s1) locQuery = `&locationId=${s1.id}`;
+          if (s1) locId = s1.id;
         } else if (reportBranchFilter === 'shop2') {
           const s2 = locations.find(l => l.code === 'shop2_warehouse2');
-          if (s2) locQuery = `&locationId=${s2.id}`;
+          if (s2) locId = s2.id;
         }
       } else {
-        locQuery = `&locationId=${activeBranchId}`;
+        locId = activeBranchId;
       }
 
-      const data = await apiCall(`/api/reports/sales?period=${reportPeriod}${locQuery}`);
+      const data = await SupabaseService.getSalesReport(reportPeriod, locId);
       setReportData({
         totalRevenue: (data.totalRevenuePiastres || 0) / 100,
         totalCash: (data.totalCashPiastres || 0) / 100,
@@ -297,8 +287,8 @@ export default function App() {
 
   const loadVehicleData = async (period: 'daily' | 'monthly' | 'yearly') => {
     try {
-      const stops = await apiCall(`/api/vehicle/stops?period=${period}`);
-      const expenses = await apiCall(`/api/vehicle/expenses?period=${period}`);
+      const stops = await SupabaseService.getVehicleStops(period);
+      const expenses = await SupabaseService.getVehicleExpenses(period);
       setVehicleStops(stops);
       setVehicleExpenses(expenses);
     } catch (e: any) {
@@ -307,7 +297,7 @@ export default function App() {
   };
 
   // -------------------------------------------------------------
-  // LOGIN LOGIC
+  // LOGIN LOGIC (Cloud Direct Authentication)
   // -------------------------------------------------------------
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -315,27 +305,14 @@ export default function App() {
     setLoading(true);
 
     try {
-      const payload: any = {
-        role: selectedRole,
-        password: passwordInput
-      };
-      if (selectedRole === 'branch') {
-        payload.locationCode = branchChoice;
+      if (!selectedRole) {
+        throw new Error('يرجى اختيار الحساب المطلوب');
       }
 
-      const res = await fetch(`${API_BASE}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      const user = await SupabaseService.login(selectedRole, branchChoice, passwordInput);
+      setCurrentUser(user);
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'فشل تسجيل الدخول، تأكد من كلمة المرور');
-      }
-
-      setCurrentUser(data.user);
-      if (data.user.role === 'driver') {
+      if (user.role === 'driver') {
         setActiveTab('vehicle');
       } else {
         setActiveTab('pos');
@@ -343,7 +320,7 @@ export default function App() {
       setLoading(false);
     } catch (err: any) {
       setLoading(false);
-      setLoginError(err.message);
+      setLoginError(err.message || 'فشل تسجيل الدخول، تأكد من كلمة المرور');
     }
   };
 
@@ -413,6 +390,7 @@ export default function App() {
       const idempotencyKey = `pos-${Date.now()}-${Math.random().toString(36).substring(7)}`;
       const payload = {
         locationId: activeBranchId,
+        cashierId: currentUser.id,
         customerName: customerName.trim() || undefined,
         items: cart.map(item => ({
           productId: item.product.id,
@@ -426,10 +404,7 @@ export default function App() {
         idempotencyKey
       };
 
-      const sale = await apiCall('/api/sales', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
+      const sale = await SupabaseService.commitSale(payload);
 
       setAlertMsg({
         text: `تم حفظ الفاتورة بنجاح في السحابة (${sale.invoice_number}) بمبلغ ${cartTotal.toFixed(2)} ج.م`,
@@ -465,20 +440,15 @@ export default function App() {
 
     try {
       setLoading(true);
-      const payload = {
+      await SupabaseService.inboundGoods({
         locationId: activeBranchId,
         categoryName: inboundCategoryName.trim() || 'شوكولاتات',
         name_ar: inboundProductName.trim(),
-        sku: inboundSku.trim() || undefined,
         cartonQty: inboundCartonQty,
         piecesPerCarton: inboundPiecesPerCarton,
         cartonCostEGP: parseFloat(inboundCartonCostEGP) || 0,
-        pieceRetailEGP: parseFloat(inboundPieceRetailEGP) || 0
-      };
-
-      await apiCall('/api/products/inbound', {
-        method: 'POST',
-        body: JSON.stringify(payload)
+        pieceRetailEGP: parseFloat(inboundPieceRetailEGP) || 0,
+        actorId: currentUser.id
       });
 
       setAlertMsg({
@@ -501,14 +471,11 @@ export default function App() {
     if (!editingProduct) return;
     try {
       setLoading(true);
-      await apiCall(`/api/products/${editingProduct.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          locationId: activeBranchId,
-          retail_price_piastres: editingProduct.retail_price_piastres,
-          cost_price_piastres: editingProduct.cost_price_piastres,
-          on_hand_base: editingProduct.on_hand_base
-        })
+      await SupabaseService.updateProduct(editingProduct.id, {
+        locationId: activeBranchId,
+        retail_price_piastres: editingProduct.retail_price_piastres,
+        cost_price_piastres: editingProduct.cost_price_piastres,
+        on_hand_base: editingProduct.on_hand_base
       });
       setAlertMsg({ text: `تم تحديث المنتج (${editingProduct.name_ar}) بنجاح`, type: 'success' });
       setEditingProduct(null);
@@ -534,13 +501,7 @@ export default function App() {
     try {
       setLoading(true);
       const amountPiastres = Math.round(amountNum * 100);
-      await apiCall(`/api/sales/${settleDebtModal.id}/settle-debt`, {
-        method: 'POST',
-        body: JSON.stringify({
-          amountPiastres,
-          notes: `سداد آجل بواسطة ${currentUser.full_name}`
-        })
-      });
+      await SupabaseService.settleDebt(settleDebtModal.id, amountPiastres, currentUser.id);
 
       setAlertMsg({
         text: `تم سداد ${amountNum} ج.م بنجاح وتحديث السحابة تلقائياً`,
@@ -550,6 +511,62 @@ export default function App() {
       setSettleDebtModal(null);
       setSettleAmountEGP('');
       loadReports();
+      setLoading(false);
+    } catch (e: any) {
+      setLoading(false);
+      setAlertMsg({ text: e.message, type: 'error' });
+    }
+  };
+
+  // -------------------------------------------------------------
+  // OWNER SALE MANAGEMENT: DELETE & EDIT (صلاحية كاملة للمالك)
+  // -------------------------------------------------------------
+  const handleDeleteSale = async (saleId: string, invoiceNumber: string) => {
+    if (!window.confirm(`هل أنت متأكد من حذف وإلغاء الفاتورة (${invoiceNumber}) بالكامل؟ سيتم إرجاع البضاعة للمخزن وتحديث الحسابات بالسحابة فوراً.`)) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await SupabaseService.deleteSale(saleId, currentUser.id);
+      setAlertMsg({
+        text: `تم حذف الفاتورة (${invoiceNumber}) بنجاح واسترجاع كميات المخزون وتحديث السحابة`,
+        type: 'success'
+      });
+      await loadReports();
+      if (activeBranchId) await loadProducts(activeBranchId);
+      setLoading(false);
+    } catch (e: any) {
+      setLoading(false);
+      setAlertMsg({ text: e.message, type: 'error' });
+    }
+  };
+
+  const handleOpenEditSaleModal = (sale: SaleRecord) => {
+    setEditingSaleModal(sale);
+    setEditSaleCashEGP(((sale.paid_cash_piastres || 0) / 100).toString());
+    setEditSaleCreditEGP(((sale.on_credit_piastres || 0) / 100).toString());
+    setEditSaleNotes(sale.notes || '');
+  };
+
+  const handleSaveSaleEdit = async () => {
+    if (!editingSaleModal) return;
+    try {
+      setLoading(true);
+      const cashVal = parseFloat(editSaleCashEGP) || 0;
+      const creditVal = parseFloat(editSaleCreditEGP) || 0;
+      await SupabaseService.updateSale(editingSaleModal.id, {
+        paidCashPiastres: Math.round(cashVal * 100),
+        onCreditPiastres: Math.round(creditVal * 100),
+        notes: editSaleNotes.trim()
+      });
+
+      setAlertMsg({
+        text: `تم حفظ تعديلات الفاتورة (${editingSaleModal.invoice_number}) بنجاح بالسحابة`,
+        type: 'success'
+      });
+      setEditingSaleModal(null);
+      await loadReports();
       setLoading(false);
     } catch (e: any) {
       setLoading(false);
@@ -585,8 +602,9 @@ export default function App() {
       const idempotencyKey = `veh-${Date.now()}-${Math.random().toString(36).substring(7)}`;
       const targetLoc = locations.find(l => l.type === 'vehicle')?.id || activeBranchId;
 
-      const payload = {
+      await SupabaseService.commitSale({
         locationId: targetLoc,
+        cashierId: currentUser.id,
         customerName: stopShopName.trim(),
         items: [{
           productId: stopSelectedProdId || products[0]?.id || 'veh-prod',
@@ -597,11 +615,6 @@ export default function App() {
         onCreditPiastres: Math.round(remainingNum * 100),
         notes: `تسليم محطة: ${stopShopName} (${finalItemName})`,
         idempotencyKey
-      };
-
-      await apiCall('/api/sales', {
-        method: 'POST',
-        body: JSON.stringify(payload)
       });
 
       setAlertMsg({
@@ -632,13 +645,11 @@ export default function App() {
 
     try {
       setLoading(true);
-      await apiCall('/api/vehicle/expenses', {
-        method: 'POST',
-        body: JSON.stringify({
-          amountPiastres: Math.round(amountNum * 100),
-          reason: expReason.trim() || 'مصاريف سيارة التوزيع (بنزين/صيانة)'
-        })
-      });
+      await SupabaseService.recordVehicleExpense(
+        Math.round(amountNum * 100),
+        expReason.trim() || 'مصاريف سيارة التوزيع (بنزين/صيانة)',
+        currentUser.id
+      );
 
       setAlertMsg({ text: `تم تسجيل مصروف ${amountNum} ج.م في السحابة بنجاح`, type: 'success' });
       setExpAmountEGP('');
@@ -1782,6 +1793,24 @@ export default function App() {
                                   <span>تسديد الآجل</span>
                                 </button>
                               )}
+                              {currentUser?.role === 'owner' && (
+                                <>
+                                  <button
+                                    onClick={() => handleOpenEditSaleModal(s)}
+                                    className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg border border-amber-200 transition-colors"
+                                    title="تعديل الفاتورة (صلاحية المالك)"
+                                  >
+                                    <Edit className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteSale(s.id, s.invoice_number)}
+                                    className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg border border-rose-200 transition-colors"
+                                    title="حذف الفاتورة واسترجاع المخزون للسحابة (صلاحية المالك)"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              )}
                               <button
                                 onClick={() => setPrintReceiptModal(s)}
                                 className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg"
@@ -2308,6 +2337,94 @@ export default function App() {
               >
                 <Printer className="w-3.5 h-3.5" />
                 <span>طباعة الآن</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------------------------------------------------
+          MODAL: EDIT SALE INVOICE (صلاحية تعديل الفواتير للمالك)
+          ------------------------------------------------------------- */}
+      {editingSaleModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 animate-scaleUp space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Edit className="w-5 h-5 text-amber-600" />
+                <span className="font-bold text-sm text-slate-800">
+                  تعديل الفاتورة: {editingSaleModal.invoice_number}
+                </span>
+              </div>
+              <button onClick={() => setEditingSaleModal(null)} className="p-1 text-slate-400 hover:text-slate-600 rounded">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-xl text-xs space-y-1">
+              <div className="flex justify-between">
+                <span className="text-slate-500">العميل:</span>
+                <span className="font-bold text-slate-800">{editingSaleModal.customers?.name || 'نقدي'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">إجمالي الفاتورة:</span>
+                <span className="font-black text-slate-900">{((editingSaleModal.total_piastres || 0) / 100).toFixed(2)} ج.م</span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">المبلغ المحصل نقداً (ج.م):</label>
+                <input
+                  type="number"
+                  value={editSaleCashEGP}
+                  onChange={(e) => {
+                    const cash = parseFloat(e.target.value) || 0;
+                    const tot = (editingSaleModal.total_piastres || 0) / 100;
+                    setEditSaleCashEGP(e.target.value);
+                    setEditSaleCreditEGP(Math.max(0, tot - cash).toFixed(2));
+                  }}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">المبلغ المتبقي الآجل (ج.م):</label>
+                <input
+                  type="number"
+                  value={editSaleCreditEGP}
+                  onChange={(e) => setEditSaleCreditEGP(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">ملاحظات الفاتورة:</label>
+                <textarea
+                  value={editSaleNotes}
+                  onChange={(e) => setEditSaleNotes(e.target.value)}
+                  rows={2}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold outline-none focus:border-amber-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setEditingSaleModal(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={handleSaveSaleEdit}
+                className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow flex items-center gap-1.5"
+              >
+                {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                <span>حفظ التعديلات بالسحابة</span>
               </button>
             </div>
           </div>
