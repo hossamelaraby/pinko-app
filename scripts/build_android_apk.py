@@ -175,6 +175,7 @@ public class MainActivity extends Activity {
         setContentView(rootLayout);
 
         WebSettings settings = mWebView.getSettings();
+        settings.setUserAgentString("PinkoApp-Android/1.0.0");
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
