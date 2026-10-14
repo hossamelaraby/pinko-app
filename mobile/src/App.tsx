@@ -25,7 +25,9 @@ import {
   Receipt, 
   FileText, 
   AlertCircle,
-  BarChart3
+  BarChart3,
+  Settings,
+  Server
 } from 'lucide-react';
 import { ApiClient } from './services/api';
 
@@ -40,6 +42,19 @@ export default function App() {
   const [branchChoice, setBranchChoice] = useState<BranchChoice>('shop1_warehouse1');
   const [passwordInput, setPasswordInput] = useState<string>('');
   const [loginError, setLoginError] = useState<string | null>(null);
+
+  // Server URL Configuration for Local/Network/Cloud Android APK
+  const [serverUrl, setServerUrl] = useState<string>(() => {
+    return localStorage.getItem('pinko_server_url') || (window.location.protocol === 'file:' ? 'http://localhost:4000' : '');
+  });
+  const [showServerConfig, setShowServerConfig] = useState<boolean>(false);
+  const [tempServerUrl, setTempServerUrl] = useState<string>(serverUrl);
+
+  const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
+    const base = serverUrl.replace(/\/+$/, '');
+    const url = endpoint.startsWith('http') ? endpoint : `${base}${endpoint}`;
+    return fetch(url, options);
+  };
 
   // App Navigation Tabs (بيع كاشير / المخزن / المبيعات والتقارير / خط سير السيارة)
   const [workMode, setWorkMode] = useState<'sell' | 'warehouse' | 'sales_history' | 'vehicle_route'>('sell');
@@ -122,28 +137,28 @@ export default function App() {
 
   // Fetch initial locations
   useEffect(() => {
-    fetch('/api/locations', { headers: { 'x-user-role': 'owner' } })
+    apiFetch('/api/locations', { headers: { 'x-user-role': 'owner' } })
       .then(r => r.json())
       .then(d => { if (Array.isArray(d)) setLocations(d); })
       .catch(() => {});
-  }, []);
+  }, [serverUrl]);
 
   // Refresh branch data
   const refreshBranchData = async (branchId?: string) => {
     const locId = branchId || activeBranchId;
     const userRole = currentUser?.username || 'owner';
     try {
-      const catRes = await fetch('/api/categories', { headers: { 'x-user-role': userRole } });
+      const catRes = await apiFetch('/api/categories', { headers: { 'x-user-role': userRole } });
       const catData = await catRes.json();
       if (Array.isArray(catData)) setCategories(catData);
 
       if (locId) {
-        const prodRes = await fetch(`/api/products?locationId=${locId}`, { headers: { 'x-user-role': userRole } });
+        const prodRes = await apiFetch(`/api/products?locationId=${locId}`, { headers: { 'x-user-role': userRole } });
         const prodData = await prodRes.json();
         if (Array.isArray(prodData)) setProducts(prodData);
       }
 
-      const custRes = await fetch('/api/customers', { headers: { 'x-user-role': userRole } });
+      const custRes = await apiFetch('/api/customers', { headers: { 'x-user-role': userRole } });
       const custData = await custRes.json();
       if (Array.isArray(custData)) setCustomers(custData);
     } catch (e) {}
@@ -153,8 +168,8 @@ export default function App() {
     const userRole = currentUser?.username || 'owner';
     try {
       const [stopsRes, expRes] = await Promise.all([
-        fetch(`/api/vehicle/stops?period=${period}`, { headers: { 'x-user-role': userRole } }),
-        fetch(`/api/vehicle/expenses?period=${period}`, { headers: { 'x-user-role': userRole } })
+        apiFetch(`/api/vehicle/stops?period=${period}`, { headers: { 'x-user-role': userRole } }),
+        apiFetch(`/api/vehicle/expenses?period=${period}`, { headers: { 'x-user-role': userRole } })
       ]);
       const stops = await stopsRes.json();
       const exps = await expRes.json();
@@ -168,7 +183,7 @@ export default function App() {
     try {
       setLoading(true);
       const locParam = locFilter !== 'all' ? `&locationId=${locFilter}` : '';
-      const res = await fetch(`/api/reports/sales?period=${period}${locParam}`, {
+      const res = await apiFetch(`/api/reports/sales?period=${period}${locParam}`, {
         headers: { 'x-user-role': userRole }
       });
       const data = await res.json();
@@ -190,7 +205,7 @@ export default function App() {
     setLoginError(null);
 
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await apiFetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -342,7 +357,7 @@ export default function App() {
         idempotencyKey
       };
 
-      const res = await fetch('/api/sales', {
+      const res = await apiFetch('/api/sales', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -393,7 +408,7 @@ export default function App() {
 
     try {
       setLoading(true);
-      const res = await fetch('/api/products/inbound', {
+      const res = await apiFetch('/api/products/inbound', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -436,7 +451,7 @@ export default function App() {
     if (!editingProd) return;
     try {
       setLoading(true);
-      const res = await fetch(`/api/products/${editingProd.id}`, {
+      const res = await apiFetch(`/api/products/${editingProd.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -471,7 +486,7 @@ export default function App() {
 
     try {
       setLoading(true);
-      const res = await fetch(`/api/sales/${saleId}/settle-debt`, {
+      const res = await apiFetch(`/api/sales/${saleId}/settle-debt`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -533,7 +548,7 @@ export default function App() {
         idempotencyKey
       };
 
-      const res = await fetch('/api/sales', {
+      const res = await apiFetch('/api/sales', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -570,7 +585,7 @@ export default function App() {
 
     try {
       setLoading(true);
-      const res = await fetch('/api/vehicle/expenses', {
+      const res = await apiFetch('/api/vehicle/expenses', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -730,6 +745,71 @@ export default function App() {
                 {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
                 <span>دخول النظام</span>
               </button>
+            </div>
+          )}
+
+          {/* Server Connection Settings Button */}
+          <div className="pt-2 text-center">
+            <button
+              type="button"
+              onClick={() => { setTempServerUrl(serverUrl); setShowServerConfig(true); }}
+              className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-pinko-plum font-semibold bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm"
+            >
+              <Server className="w-3.5 h-3.5 text-pinko-accent" />
+              <span>إعدادات الاتصال بالسحابة: {serverUrl ? serverUrl : 'تلقائي (سحابي)'}</span>
+            </button>
+          </div>
+
+          {/* Server Settings Modal */}
+          {showServerConfig && (
+            <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+              <div className="bg-white w-full max-w-sm rounded-2xl p-5 shadow-2xl space-y-4 text-right">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                    <Server className="w-4 h-4 text-pinko-accent" />
+                    عنوان خادم السحابة / الشبكة
+                  </h3>
+                  <button onClick={() => setShowServerConfig(false)} className="text-slate-400 hover:text-slate-600 text-sm font-bold">✕</button>
+                </div>
+                <p className="text-xs text-slate-500">
+                  أدخل عنوان IP للكمبيوتر الرئيسي أو رابط السحابة للربط مع قاعدة بيانات Supabase:
+                </p>
+                <input
+                  type="text"
+                  value={tempServerUrl}
+                  onChange={(e) => setTempServerUrl(e.target.value)}
+                  placeholder="مثال: http://192.168.1.100:4000"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono outline-none focus:border-pinko-accent text-left"
+                  dir="ltr"
+                />
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const trimmed = tempServerUrl.trim();
+                      setServerUrl(trimmed);
+                      localStorage.setItem('pinko_server_url', trimmed);
+                      setShowServerConfig(false);
+                      setAlertMsg({ text: 'تم حفظ عنوان الخادم بنجاح وتحديث الاتصال', type: 'success' });
+                    }}
+                    className="flex-1 py-2 bg-pinko-plum text-white rounded-xl text-xs font-bold shadow"
+                  >
+                    حفظ وتطبيق
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTempServerUrl('http://localhost:4000');
+                      setServerUrl('http://localhost:4000');
+                      localStorage.setItem('pinko_server_url', 'http://localhost:4000');
+                      setShowServerConfig(false);
+                    }}
+                    className="px-3 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold"
+                  >
+                    افتراضي
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

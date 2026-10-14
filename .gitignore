@@ -25,3 +25,15 @@ yarn-error.log*
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Android build temp
+android_build/
+*.keystore
+
+# Large release binaries (>100MB exceed GitHub push limits)
+release/*.exe
+release/win-unpacked/
+release/*.blockmap
+release/*.yml
+release/*.idsig
+

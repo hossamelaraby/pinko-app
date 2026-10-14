@@ -213,13 +213,16 @@ export default function App() {
   }, [currentUser]);
 
   // Helper APIs
+  const API_BASE = window.location.protocol === 'file:' ? 'http://localhost:4000' : '';
+
   const apiCall = async (url: string, options: RequestInit = {}) => {
     const headers = {
       'Content-Type': 'application/json',
       'x-user-role': currentUser?.username || 'owner',
       ...(options.headers || {})
     };
-    const res = await fetch(url, { ...options, headers });
+    const fullUrl = url.startsWith('http') ? url : `${API_BASE}${url}`;
+    const res = await fetch(fullUrl, { ...options, headers });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'فشل الاتصال بالخادم' }));
       throw new Error(err.error || `خطأ ${res.status}`);
@@ -320,7 +323,7 @@ export default function App() {
         payload.locationCode = branchChoice;
       }
 
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
