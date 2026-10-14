@@ -284,6 +284,21 @@ export class SupabaseService {
     return true;
   }
 
+  // 6.b Delete Product from catalog & stock
+  static async deleteProduct(id: string) {
+    // Delete stock balances first
+    await supabase.from('stock_balances').delete().eq('product_id', id);
+    // Delete stock ledger movements for this product
+    await supabase.from('stock_ledger').delete().eq('product_id', id);
+    // Delete product record
+    const { error } = await supabase.from('products').delete().eq('id', id);
+    if (error) {
+      // If referenced by past foreign keys, gracefully deactivate
+      await supabase.from('products').update({ is_active: false }).eq('id', id);
+    }
+    return true;
+  }
+
   // 7. Commit POS Sale
   static async commitSale(payload: {
     locationId: string;

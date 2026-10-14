@@ -450,6 +450,25 @@ export default function App() {
     }
   };
 
+  const handleDeleteProduct = async (productId: string, productName: string) => {
+    if (!window.confirm(`هل أنت متأكد من حذف الصنف (${productName}) نهائياً من المخزن وقاعدة البيانات السحابية؟`)) {
+      return;
+    }
+    try {
+      setLoading(true);
+      await SupabaseService.deleteProduct(productId);
+      setAlertMsg({
+        text: `تم حذف الصنف (${productName}) ورصيده المخزني بنجاح من السحابة`,
+        type: 'success'
+      });
+      await refreshBranchData();
+      setLoading(false);
+    } catch (e: any) {
+      setLoading(false);
+      setAlertMsg({ text: e.message || 'فشل حذف الصنف', type: 'error' });
+    }
+  };
+
   // Settle Debt
   const handleSettleDebt = async (saleId: string) => {
     const amountVal = parseFloat(settleAmountEGP);
@@ -475,7 +494,7 @@ export default function App() {
 
   // Owner Delete & Edit Sale
   const handleDeleteSale = async (saleId: string, invoiceNumber: string) => {
-    if (!window.confirm(`هل أنت متأكد من حذف وإلغاء الفاتورة (${invoiceNumber}) بالكامل؟ سيتم إرجاع البضاعة للمخزن وتحديث الحسابات بالسحابة فوراً.`)) {
+    if (!window.confirm(`هل أنت متأكد من حذف وإلغاء الفاتورة (${invoiceNumber}) كـ "مرتجع مبيعات"؟\nسيتم فوراً إرجاع جميع الأصناف المباعة إلى رصيد المخزن في السحابة، وتعديل إجمالي المبيعات وخصم أي آجل مسجل عليها.`)) {
       return;
     }
 
@@ -483,7 +502,7 @@ export default function App() {
       setLoading(true);
       await SupabaseService.deleteSale(saleId, currentUser.id);
       setAlertMsg({
-        text: `تم حذف الفاتورة (${invoiceNumber}) بنجاح واسترجاع كميات المخزون وتحديث السحابة`,
+        text: `تم حذف الفاتورة (${invoiceNumber}) بنجاح كمرتجع مبيعات واسترجاع البضاعة وتحديث السحابة فوراً`,
         type: 'success'
       });
       if (workMode === 'sales_history') loadReports(reportPeriod, currentUser.role === 'owner' ? reportLocationFilter : activeBranchId);
@@ -1257,17 +1276,26 @@ export default function App() {
                     <div className="text-left flex items-center gap-2">
                       <span className="font-black text-sm text-pinko-plum">{p.on_hand_base} عبوة</span>
                       {currentUser.role === 'owner' && (
-                        <button
-                          onClick={() => {
-                            setEditingProd(p);
-                            setEditOnHand(p.on_hand_base.toString());
-                            setEditRetailPrice((p.retail_price_piastres / 100).toString());
-                            setEditCostPrice((p.cost_price_piastres / 100).toString());
-                          }}
-                          className="px-2 py-1 bg-slate-800 text-white rounded text-[10px] font-bold"
-                        >
-                          تعديل
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              setEditingProd(p);
+                              setEditOnHand(p.on_hand_base.toString());
+                              setEditRetailPrice((p.retail_price_piastres / 100).toString());
+                              setEditCostPrice((p.cost_price_piastres / 100).toString());
+                            }}
+                            className="px-2 py-1 bg-slate-800 text-white rounded text-[10px] font-bold"
+                          >
+                            تعديل
+                          </button>
+                          <button
+                            onClick={() => handleDeleteProduct(p.id, p.name_ar)}
+                            className="p-1 bg-rose-50 text-rose-600 rounded border border-rose-200"
+                            title="حذف الصنف نهائياً"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>

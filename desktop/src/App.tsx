@@ -487,6 +487,26 @@ export default function App() {
     }
   };
 
+  const handleDeleteProduct = async (productId: string, productName: string) => {
+    if (!window.confirm(`هل أنت متأكد من حذف الصنف (${productName}) نهائياً من المخزن وقاعدة البيانات السحابية؟`)) {
+      return;
+    }
+    try {
+      setLoading(true);
+      await SupabaseService.deleteProduct(productId);
+      setAlertMsg({
+        text: `تم حذف الصنف (${productName}) ورصيده المخزني بنجاح من السحابة`,
+        type: 'success'
+      });
+      if (activeBranchId) await loadProducts(activeBranchId);
+      await loadCategories();
+      setLoading(false);
+    } catch (e: any) {
+      setLoading(false);
+      setAlertMsg({ text: e.message || 'فشل حذف الصنف', type: 'error' });
+    }
+  };
+
   // -------------------------------------------------------------
   // DEBT SETTLEMENT LOGIC
   // -------------------------------------------------------------
@@ -522,7 +542,7 @@ export default function App() {
   // OWNER SALE MANAGEMENT: DELETE & EDIT (صلاحية كاملة للمالك)
   // -------------------------------------------------------------
   const handleDeleteSale = async (saleId: string, invoiceNumber: string) => {
-    if (!window.confirm(`هل أنت متأكد من حذف وإلغاء الفاتورة (${invoiceNumber}) بالكامل؟ سيتم إرجاع البضاعة للمخزن وتحديث الحسابات بالسحابة فوراً.`)) {
+    if (!window.confirm(`هل أنت متأكد من حذف وإلغاء الفاتورة (${invoiceNumber}) كـ "مرتجع مبيعات"؟\nسيتم فوراً إرجاع جميع الأصناف المباعة إلى رصيد المخزن في السحابة، وتعديل إجمالي المبيعات وخصم أي آجل مسجل عليها.`)) {
       return;
     }
 
@@ -530,7 +550,7 @@ export default function App() {
       setLoading(true);
       await SupabaseService.deleteSale(saleId, currentUser.id);
       setAlertMsg({
-        text: `تم حذف الفاتورة (${invoiceNumber}) بنجاح واسترجاع كميات المخزون وتحديث السحابة`,
+        text: `تم حذف الفاتورة (${invoiceNumber}) بنجاح كمرتجع مبيعات واسترجاع البضاعة وتحديث السحابة فوراً`,
         type: 'success'
       });
       await loadReports();
@@ -1560,13 +1580,22 @@ export default function App() {
                           </td>
                           {currentUser.role === 'owner' && (
                             <td className="p-3 text-center">
-                              <button
-                                onClick={() => setEditingProduct({ ...p })}
-                                className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
-                                title="تعديل السعر أو الجرد"
-                              >
-                                <Edit className="w-3.5 h-3.5" />
-                              </button>
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  onClick={() => setEditingProduct({ ...p })}
+                                  className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
+                                  title="تعديل السعر أو الجرد (إيديت)"
+                                >
+                                  <Edit className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteProduct(p.id, p.name_ar)}
+                                  className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg border border-rose-200 transition-colors"
+                                  title="حذف الصنف نهائياً من المخزن"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </td>
                           )}
                         </tr>
@@ -1804,10 +1833,11 @@ export default function App() {
                                   </button>
                                   <button
                                     onClick={() => handleDeleteSale(s.id, s.invoice_number)}
-                                    className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg border border-rose-200 transition-colors"
-                                    title="حذف الفاتورة واسترجاع المخزون للسحابة (صلاحية المالك)"
+                                    className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg border border-rose-200 transition-colors flex items-center gap-1 font-bold text-[11px]"
+                                    title="حذف الفاتورة كـ (مرتجع مبيعات) وإرجاع البضاعة للمخزن السحابي"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
+                                    <span>مرتجع / حذف</span>
                                   </button>
                                 </>
                               )}
