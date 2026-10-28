@@ -1,5 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { SupabaseService, ROLE_PASSWORDS } from './services/supabaseService';
+import {
+  SupabaseService,
+  ROLE_PASSWORDS,
+  getActiveSupabaseUrl,
+  getActiveSupabaseKey,
+  reinitSupabaseClient,
+  DEFAULT_SUPABASE_URL,
+  DEFAULT_SUPABASE_KEY
+} from './services/supabaseService';
 import {
   Crown,
   Building2,
@@ -27,7 +35,12 @@ import {
   Edit,
   Save,
   X,
-  FileText
+  FileText,
+  Settings,
+  ExternalLink,
+  Database,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 
 interface Location {
@@ -161,6 +174,50 @@ export default function App() {
   // Time & Clock
   const [currentTime, setCurrentTime] = useState<string>(new Date().toLocaleTimeString('ar-EG'));
 
+  // Cloud Health & Project Settings State
+  const [isCloudOnline, setIsCloudOnline] = useState<boolean | null>(null);
+  const [cloudStatusMsg, setCloudStatusMsg] = useState<string>('');
+  const [showCloudSettingsModal, setShowCloudSettingsModal] = useState<boolean>(false);
+  const [customSupabaseUrl, setCustomSupabaseUrl] = useState<string>(getActiveSupabaseUrl());
+  const [customSupabaseKey, setCustomSupabaseKey] = useState<string>(getActiveSupabaseKey());
+  const [isCheckingCloud, setIsCheckingCloud] = useState<boolean>(false);
+
+  const checkCloudHealthStatus = async () => {
+    setIsCheckingCloud(true);
+    const res = await SupabaseService.checkCloudHealth();
+    setIsCloudOnline(res.online);
+    setCloudStatusMsg(res.message || '');
+    setIsCheckingCloud(false);
+    return res;
+  };
+
+  useEffect(() => {
+    checkCloudHealthStatus();
+  }, []);
+
+  const handleSaveCloudSettings = async () => {
+    reinitSupabaseClient(customSupabaseUrl, customSupabaseKey);
+    const res = await checkCloudHealthStatus();
+    if (res.online) {
+      setAlertMsg({ text: 'تم الاتصال بالسحابة بنجاح! تم حفظ وتفعيل إعدادات الربط.', type: 'success' });
+      if (currentUser) {
+        loadLocations();
+        loadCategories();
+        loadProducts(activeBranchId);
+      }
+    } else {
+      setAlertMsg({ text: 'تنبيه: لا يزال الاتصال معطلاً. يرجى التأكد من استئناف المشروع في Supabase أو صحة البيانات.', type: 'error' });
+    }
+  };
+
+  const handleResetCloudSettings = async () => {
+    setCustomSupabaseUrl(DEFAULT_SUPABASE_URL);
+    setCustomSupabaseKey(DEFAULT_SUPABASE_KEY);
+    reinitSupabaseClient(DEFAULT_SUPABASE_URL, DEFAULT_SUPABASE_KEY);
+    await checkCloudHealthStatus();
+    setAlertMsg({ text: 'تمت استعادة الإعدادات الافتراضية للربط السحابي.', type: 'info' });
+  };
+
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
@@ -224,11 +281,13 @@ export default function App() {
     try {
       const locs: any = await SupabaseService.getLocations();
       setLocations(locs);
+      const defaultBranch = locs.find((l: any) => l.code === 'shop1_warehouse1') || locs[0];
       if (currentUser?.role === 'owner') {
-        const defaultBranch = locs.find((l: any) => l.code === 'shop1_warehouse1') || locs[0];
         if (defaultBranch && !activeBranchId) setActiveBranchId(defaultBranch.id);
       } else if (currentUser?.assigned_location_id) {
         setActiveBranchId(currentUser.assigned_location_id);
+      } else if (defaultBranch && !activeBranchId) {
+        setActiveBranchId(defaultBranch.id);
       }
     } catch (e: any) {
       setAlertMsg({ text: e.message, type: 'error' });
@@ -244,10 +303,11 @@ export default function App() {
     }
   };
 
-  const loadProducts = async (locationId: string) => {
+  const loadProducts = async (locationId?: string) => {
     try {
       setLoading(true);
-      const prods: any = await SupabaseService.getProducts(locationId);
+      const targetLocId = locationId || activeBranchId || locations[0]?.id || 'shop1_warehouse1';
+      const prods: any = await SupabaseService.getProducts(targetLocId);
       setProducts(prods);
       setLoading(false);
     } catch (e: any) {
@@ -385,11 +445,13 @@ export default function App() {
       return;
     }
 
+    const targetLocId = activeBranchId || locations[0]?.id || 'shop1_warehouse1';
+
     try {
       setLoading(true);
       const idempotencyKey = `pos-${Date.now()}-${Math.random().toString(36).substring(7)}`;
       const payload = {
-        locationId: activeBranchId,
+        locationId: targetLocId,
         cashierId: currentUser.id,
         customerName: customerName.trim() || undefined,
         items: cart.map(item => ({
@@ -414,13 +476,13 @@ export default function App() {
       if (andPrint) {
         setPrintReceiptModal({
           ...sale,
-          locations: { name: locations.find(l => l.id === activeBranchId)?.name || 'الفرع' },
+          locations: { name: locations.find(l => l.id === targetLocId)?.name || 'الفرع' },
           users: { full_name: currentUser.full_name }
         });
       }
 
       clearCart();
-      loadProducts(activeBranchId);
+      loadProducts(targetLocId);
       setLoading(false);
     } catch (e: any) {
       setLoading(false);
@@ -438,10 +500,12 @@ export default function App() {
       return;
     }
 
+    const targetLocId = activeBranchId || locations[0]?.id || 'shop1_warehouse1';
+
     try {
       setLoading(true);
       await SupabaseService.inboundGoods({
-        locationId: activeBranchId,
+        locationId: targetLocId,
         categoryName: inboundCategoryName.trim() || 'شوكولاتات',
         name_ar: inboundProductName.trim(),
         cartonQty: inboundCartonQty,
@@ -458,7 +522,7 @@ export default function App() {
 
       setInboundProductName('');
       setInboundSku('');
-      loadProducts(activeBranchId);
+      loadProducts(targetLocId);
       loadCategories();
       setLoading(false);
     } catch (e: any) {
@@ -699,6 +763,145 @@ export default function App() {
   // Active Branch Display
   const currentBranchName = locations.find(l => l.id === activeBranchId)?.name || 'الفرع الرئيسي';
 
+  // Modal: Cloud Settings & Project Unpause
+  const renderCloudSettingsModal = () => {
+    if (!showCloudSettingsModal) return null;
+    return (
+      <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div className="bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl max-w-xl w-full p-6 text-white text-right space-y-4 animate-scaleUp">
+          {/* Modal Header */}
+          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-pinko-accent/20 text-pinko-accent flex items-center justify-center">
+                <Database className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-white">إعدادات الاتصال بالسحابة (Supabase Cloud)</h3>
+                <p className="text-xs text-slate-400">إدارة وتحديث ربط السحابة، استئناف المشروع، وتخصيص الخادم</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowCloudSettingsModal(false)}
+              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Cloud Status Box */}
+          <div className={`p-4 rounded-2xl border text-xs flex items-start gap-3 ${
+            isCloudOnline === true
+              ? 'bg-emerald-950/40 border-emerald-800/50 text-emerald-300'
+              : 'bg-amber-950/40 border-amber-800/50 text-amber-200'
+          }`}>
+            <div className="mt-0.5 shrink-0">
+              {isCloudOnline === true ? <CheckCircle2 className="w-5 h-5 text-emerald-400" /> : <AlertCircle className="w-5 h-5 text-amber-400" />}
+            </div>
+            <div className="space-y-1">
+              <div className="font-bold text-sm">
+                {isCloudOnline === true ? 'الاتصال بالسحابة يعمل بنجاح 🟢' : 'مشروع Supabase متوقف مؤقتاً (Paused) ⚠️'}
+              </div>
+              <div className="text-slate-300 text-[11px] leading-relaxed">
+                {isCloudOnline === true
+                  ? 'قاعدة البيانات السحابية متصلة ومتاحة لتسجيل ومزامنة المنتجات، المبيعات، والمخازن مباشرة عبر جميع الأجهزة.'
+                  : 'في باقة Supabase المجانية، تقوم منصة Supabase بإيقاف المشروع مؤقتاً إذا لم تحدث عمليات لمدة 7 أيام. لاستئناف العمل فوراً وبنقرة واحدة، اضغط على زر فتح لوحة التحكم بالأسفل واضغط Resume وسيتم تشغيل السيرفر خلال دقيقة.'}
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Unpause Action */}
+          <div className="p-4 bg-slate-800/80 border border-slate-700 rounded-2xl space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-xs text-white">1. استئناف المشروع السحابي الحالي (بنقرة واحدة):</span>
+              <span className="text-[10px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/30 font-bold">الخيار السريع</span>
+            </div>
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              اضغط على الزر التالي لفتح صفحة مشروعك على موقع Supabase واضغط على <strong>Restore project (استعادة المشروع)</strong>:
+            </p>
+            <a
+              href="https://supabase.com/dashboard/project/ibtqosnxktzxmniwhuqa"
+              target="_blank"
+              rel="noreferrer"
+              className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition-all"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span>فتح لوحة تحكم Supabase لاستئناف المشروع (Resume ⚡)</span>
+            </a>
+          </div>
+
+          {/* Custom URL & Key */}
+          <div className="p-4 bg-slate-800/50 border border-slate-700/80 rounded-2xl space-y-3">
+            <div className="font-bold text-xs text-white">2. أو ربط مشروع سحابي جديد / مخصص:</div>
+            <div className="space-y-2">
+              <div>
+                <label className="text-[11px] font-bold text-slate-300 block mb-1">Project URL:</label>
+                <input
+                  type="text"
+                  value={customSupabaseUrl}
+                  onChange={(e) => setCustomSupabaseUrl(e.target.value)}
+                  placeholder="https://xxxx.supabase.co"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs font-mono outline-none focus:border-pinko-accent"
+                  dir="ltr"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-slate-300 block mb-1">API Key (Anon / Secret):</label>
+                <input
+                  type="password"
+                  value={customSupabaseKey}
+                  onChange={(e) => setCustomSupabaseKey(e.target.value)}
+                  placeholder="مفتاح السحابة..."
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs font-mono outline-none focus:border-pinko-accent"
+                  dir="ltr"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                disabled={isCheckingCloud}
+                onClick={handleSaveCloudSettings}
+                className="flex-1 py-2 bg-pinko-accent hover:bg-pink-600 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow"
+              >
+                {isCheckingCloud ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                <span>حفظ واختبار الاتصال</span>
+              </button>
+              <button
+                type="button"
+                disabled={isCheckingCloud}
+                onClick={handleResetCloudSettings}
+                className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl text-xs font-bold transition-colors"
+              >
+                استعادة الافتراضي
+              </button>
+            </div>
+          </div>
+
+          {/* Modal Footer */}
+          <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-xs">
+            <button
+              type="button"
+              disabled={isCheckingCloud}
+              onClick={checkCloudHealthStatus}
+              className="text-pink-400 hover:text-pink-300 flex items-center gap-1 font-bold transition-colors"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isCheckingCloud ? 'animate-spin' : ''}`} />
+              <span>إعادة فحص الاتصال الآن</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowCloudSettingsModal(false)}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition-colors"
+            >
+              إغلاق
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // -------------------------------------------------------------
   // RENDER: LOGIN SCREEN
   // -------------------------------------------------------------
@@ -855,7 +1058,26 @@ export default function App() {
               </div>
             </div>
           )}
+
+          {/* Cloud Health & Settings quick status at login */}
+          <div className="mt-6 pt-4 border-t border-slate-800/80 w-full flex items-center justify-between text-xs text-slate-400">
+            <div className="flex items-center gap-2">
+              <span className={`w-2.5 h-2.5 rounded-full ${isCloudOnline === false ? 'bg-rose-500' : isCloudOnline === true ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
+              <span>{isCloudOnline === false ? 'سحابة Supabase: متوقفة مؤقتاً (Paused)' : isCloudOnline === true ? 'سحابة Supabase: متصلة بنجاح' : 'جاري فحص الاتصال بالسحابة...'}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowCloudSettingsModal(true)}
+              className="text-pink-300 hover:text-white flex items-center gap-1 font-bold underline transition-colors"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              <span>إعدادات الربط واستئناف السحابة</span>
+            </button>
+          </div>
         </div>
+
+        {/* Modal rendered on login view */}
+        {renderCloudSettingsModal()}
       </div>
     );
   }
@@ -993,14 +1215,26 @@ export default function App() {
 
         {/* Sidebar Footer */}
         <div className="p-3 border-t border-slate-800 space-y-2">
-          {/* Cloud Status */}
-          <div className="px-3 py-2 bg-emerald-950/40 border border-emerald-800/40 rounded-xl flex items-center justify-between text-[11px] text-emerald-300">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>Supabase Cloud Live</span>
+          {/* Cloud Status Button */}
+          <button
+            onClick={() => setShowCloudSettingsModal(true)}
+            className={`w-full px-3 py-2 border rounded-xl flex items-center justify-between text-[11px] transition-all text-right ${
+              isCloudOnline === false
+                ? 'bg-rose-950/50 border-rose-700/60 text-rose-300 hover:bg-rose-900/60'
+                : isCloudOnline === true
+                ? 'bg-emerald-950/40 border-emerald-800/40 text-emerald-300 hover:bg-emerald-900/50'
+                : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:bg-slate-750'
+            }`}
+            title="إعدادات السحابة واستئناف المشروع"
+          >
+            <span className="flex items-center gap-1.5 truncate">
+              <span className={`w-2 h-2 rounded-full shrink-0 ${isCloudOnline === false ? 'bg-rose-500' : isCloudOnline === true ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
+              <span className="truncate">{isCloudOnline === false ? 'سحابة Supabase متوقفة' : 'Supabase Cloud Live'}</span>
             </span>
-            <span className="font-bold text-[10px]">متصل 🟢</span>
-          </div>
+            <span className="font-bold text-[10px] shrink-0">
+              {isCloudOnline === false ? 'إصلاح ⚠️' : isCloudOnline === true ? 'متصل 🟢' : 'فحص... 🟡'}
+            </span>
+          </button>
 
           <button
             onClick={handleLogout}
@@ -1053,6 +1287,23 @@ export default function App() {
             </button>
           </div>
         </header>
+
+        {/* Cloud Health Warning Banner if Paused or Offline */}
+        {isCloudOnline === false && (
+          <div className="bg-amber-500/15 border-b border-amber-500/30 px-6 py-2.5 flex items-center justify-between text-amber-900 text-xs font-bold shrink-0">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>تنبيه: قاعدة بيانات Supabase السحابية متوقفة مؤقتاً (Paused) لعدم النشاط. يمكنك استئنافها بنقرة واحدة في 60 ثانية أو تعديل الربط.</span>
+            </div>
+            <button
+              onClick={() => setShowCloudSettingsModal(true)}
+              className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors shrink-0 shadow-sm flex items-center gap-1.5"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              <span>استئناف السحابة / الإعدادات</span>
+            </button>
+          </div>
+        )}
 
         {/* Global Floating Alert Notification */}
         {alertMsg && (
@@ -2460,6 +2711,8 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* Modal: Cloud Settings & Restore */}
+      {renderCloudSettingsModal()}
     </div>
   );
 }
